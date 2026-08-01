@@ -807,7 +807,7 @@
     <!-- 04 沉浸式成员介绍 -->
     <section class="app-view reader-view" data-view="reader" aria-labelledby="profileTitle">
       <button class="back-control" data-go="directory" aria-label="返回成员目录">← MEMBERS</button>
-      <div class="reader-top"><span class="reader-progress" id="readerProgress">01 / 07</span><button class="directory-button" data-go="directory">view directory</button><button class="music-toggle" id="musicToggle" hidden type="button" title="BGM · 江湖之间" aria-label="播放背景音乐 江湖之间" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span class="music-eq" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
+      <div class="reader-top"><span class="reader-progress" id="readerProgress">01 / 07</span><button class="directory-button" data-go="directory">view directory</button><button class="music-toggle" id="musicToggle" hidden type="button" title="BGM" aria-label="播放背景音乐" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span class="music-eq" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
       <div class="reader-watermark" aria-hidden="true">WELCOME TO<br>OUR UNIVERSE</div>
       <button class="page-arrow prev" id="prevMember" aria-label="上一位成员">
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M26 16H7m0 0 8-8m-8 8 8 8"/><path d="M5 14c-2 2-1 5 1 6" opacity=".45"/></svg>
@@ -840,7 +840,7 @@
       </article>
     </section>
 
-    <audio id="bgm" src="M500002wjhYd1y1AvN.mp3" loop preload="auto"></audio>
+    <audio id="bgm" loop preload="auto"></audio>
   </main>
 
   <div class="notice" id="notice" role="status" aria-live="polite"></div>
@@ -874,8 +874,13 @@
     let noticeTimer;
     const bgmAudio = document.getElementById("bgm");
     const musicToggle = document.getElementById("musicToggle");
-    const BGM_MEMBER = "红烧糖醋鲤鱼";
-    let userPausedMusic = false;
+    const BGM_BY_MEMBER = {
+      "红烧糖醋鲤鱼": { src: "M500002wjhYd1y1AvN.mp3", title: "江湖之间" },
+      "栾凯祺": { src: "月半小夜曲1.MP3", title: "月半小夜曲" }
+    };
+    const bgmState = {}; // member name -> { time: 播放进度(秒), paused: 用户手动暂停 }
+    let currentBgmKey = null;
+    let pendingBgmSeek = 0;
 
     function escapeHtml(value) {
       return String(value)
@@ -887,7 +892,6 @@
     }
 
     function showView(name) {
-      const prevView = currentView;
       currentView = name;
       views.forEach((view) => {
         const active = view.dataset.view === name;
@@ -896,7 +900,6 @@
         if (active && view.classList.contains("directory-view")) view.scrollTop = 0;
         if (active && view.classList.contains("reader-view")) view.scrollTop = 0;
       });
-      if (name === "reader" && prevView !== "reader") userPausedMusic = false;
       syncBgm();
       history.replaceState(null, "", `#${name}`);
     }
@@ -914,16 +917,39 @@
       musicToggle.setAttribute("aria-pressed", "false");
     }
 
+    function rememberBgm() {
+      if (!currentBgmKey) return;
+      const st = bgmState[currentBgmKey] || (bgmState[currentBgmKey] = { time: 0, paused: false });
+      st.time = bgmAudio.currentTime || 0;
+    }
+
+    function loadBgm(memberName, track) {
+      rememberBgm();
+      currentBgmKey = memberName;
+      const st = bgmState[memberName] || (bgmState[memberName] = { time: 0, paused: false });
+      bgmAudio.src = track.src;
+      pendingBgmSeek = st.time || 0;
+      bgmAudio.load();
+      if (!st.paused) {
+        const attempt = bgmAudio.play();
+        if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+      }
+    }
+
     function syncBgm() {
       const member = visibleMembers[currentMember];
-      const isTarget = Boolean(member && member.name === BGM_MEMBER);
+      const track = member ? BGM_BY_MEMBER[member.name] : null;
       const inReader = currentView === "reader";
-      musicToggle.hidden = !(isTarget && inReader);
-      if (!isTarget || !inReader) {
+      musicToggle.hidden = !(track && inReader);
+      if (!track || !inReader) {
         pauseBgm();
         return;
       }
-      if (!userPausedMusic && bgmAudio.paused) {
+      musicToggle.title = `BGM · ${track.title}`;
+      musicToggle.setAttribute("aria-label", `播放背景音乐 ${track.title}`);
+      if (currentBgmKey !== member.name) {
+        loadBgm(member.name, track);
+      } else if (!bgmState[member.name].paused && bgmAudio.paused) {
         const attempt = bgmAudio.play();
         if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
       }
@@ -1019,11 +1045,11 @@
 
     musicToggle.addEventListener("click", () => {
       if (bgmAudio.paused) {
-        userPausedMusic = false;
+        if (currentBgmKey) bgmState[currentBgmKey].paused = false;
         const attempt = bgmAudio.play();
         if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
       } else {
-        userPausedMusic = true;
+        if (currentBgmKey) bgmState[currentBgmKey].paused = true;
         bgmAudio.pause();
       }
     });
@@ -1034,6 +1060,19 @@
     bgmAudio.addEventListener("pause", () => {
       musicToggle.classList.remove("is-playing");
       musicToggle.setAttribute("aria-pressed", "false");
+      rememberBgm();
+    });
+    bgmAudio.addEventListener("timeupdate", () => {
+      if (currentBgmKey) {
+        const st = bgmState[currentBgmKey] || (bgmState[currentBgmKey] = { time: 0, paused: false });
+        st.time = bgmAudio.currentTime;
+      }
+    });
+    bgmAudio.addEventListener("loadedmetadata", () => {
+      if (pendingBgmSeek) {
+        bgmAudio.currentTime = pendingBgmSeek;
+        pendingBgmSeek = 0;
+      }
     });
 
     document.addEventListener("keydown", (event) => {
