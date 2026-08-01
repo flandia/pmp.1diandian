@@ -393,6 +393,46 @@
       font-family: "Architects Daughter", cursive;
       font-size: 12px;
     }
+    .music-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid rgba(0,0,0,.14);
+      border-radius: 50%;
+      background: rgba(255,253,248,.94);
+      color: var(--red);
+      box-shadow: 0 4px 14px rgba(0,0,0,.08);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .music-toggle:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.14); }
+    .music-toggle svg { width: 15px; height: 15px; }
+    .music-eq {
+      display: none;
+      align-items: flex-end;
+      gap: 2.5px;
+      height: 13px;
+    }
+    .music-eq i {
+      display: block;
+      width: 2.5px;
+      border-radius: 2px;
+      background: currentColor;
+      transform-origin: bottom;
+      animation: musicBounce 1s ease-in-out infinite;
+    }
+    .music-eq i:nth-child(1) { height: 5px; }
+    .music-eq i:nth-child(2) { height: 12px; animation-delay: .18s; }
+    .music-eq i:nth-child(3) { height: 8px; animation-delay: .36s; }
+    .music-toggle.is-playing svg { display: none; }
+    .music-toggle.is-playing .music-eq { display: inline-flex; }
+    @keyframes musicBounce {
+      0%, 100% { transform: scaleY(.55); }
+      50% { transform: scaleY(1); }
+    }
     .reader-watermark {
       position: absolute;
       z-index: 0;
@@ -767,7 +807,7 @@
     <!-- 04 沉浸式成员介绍 -->
     <section class="app-view reader-view" data-view="reader" aria-labelledby="profileTitle">
       <button class="back-control" data-go="directory" aria-label="返回成员目录">← MEMBERS</button>
-      <div class="reader-top"><span class="reader-progress" id="readerProgress">01 / 07</span><button class="directory-button" data-go="directory">view directory</button></div>
+      <div class="reader-top"><span class="reader-progress" id="readerProgress">01 / 07</span><button class="directory-button" data-go="directory">view directory</button><button class="music-toggle" id="musicToggle" hidden type="button" title="BGM · 江湖之间" aria-label="播放背景音乐 江湖之间" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span class="music-eq" aria-hidden="true"><i></i><i></i><i></i></span></button></div>
       <div class="reader-watermark" aria-hidden="true">WELCOME TO<br>OUR UNIVERSE</div>
       <button class="page-arrow prev" id="prevMember" aria-label="上一位成员">
         <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M26 16H7m0 0 8-8m-8 8 8 8"/><path d="M5 14c-2 2-1 5 1 6" opacity=".45"/></svg>
@@ -799,6 +839,8 @@
         </div>
       </article>
     </section>
+
+    <audio id="bgm" src="M500002wjhYd1y1AvN.mp3" loop preload="auto"></audio>
   </main>
 
   <div class="notice" id="notice" role="status" aria-live="polite"></div>
@@ -830,6 +872,10 @@
     let visibleMembers = [];
     let currentMember = 0;
     let noticeTimer;
+    const bgmAudio = document.getElementById("bgm");
+    const musicToggle = document.getElementById("musicToggle");
+    const BGM_MEMBER = "红烧糖醋鲤鱼";
+    let userPausedMusic = false;
 
     function escapeHtml(value) {
       return String(value)
@@ -841,6 +887,7 @@
     }
 
     function showView(name) {
+      const prevView = currentView;
       currentView = name;
       views.forEach((view) => {
         const active = view.dataset.view === name;
@@ -849,6 +896,8 @@
         if (active && view.classList.contains("directory-view")) view.scrollTop = 0;
         if (active && view.classList.contains("reader-view")) view.scrollTop = 0;
       });
+      if (name === "reader" && prevView !== "reader") userPausedMusic = false;
+      syncBgm();
       history.replaceState(null, "", `#${name}`);
     }
 
@@ -857,6 +906,29 @@
       notice.classList.add("show");
       clearTimeout(noticeTimer);
       noticeTimer = setTimeout(() => notice.classList.remove("show"), 2200);
+    }
+
+    function pauseBgm() {
+      if (!bgmAudio.paused) bgmAudio.pause();
+      musicToggle.classList.remove("is-playing");
+      musicToggle.setAttribute("aria-pressed", "false");
+    }
+
+    function syncBgm() {
+      const member = visibleMembers[currentMember];
+      const isTarget = Boolean(member && member.name === BGM_MEMBER);
+      const inReader = currentView === "reader";
+      musicToggle.hidden = !(isTarget && inReader);
+      if (!isTarget || !inReader) {
+        pauseBgm();
+        return;
+      }
+      if (!userPausedMusic && bgmAudio.paused) {
+        const attempt = bgmAudio.play();
+        if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+      }
+      musicToggle.classList.toggle("is-playing", !bgmAudio.paused);
+      musicToggle.setAttribute("aria-pressed", String(!bgmAudio.paused));
     }
 
     function renderDirectory(groupKey) {
@@ -914,6 +986,8 @@
       notebook.classList.remove("turn-next", "turn-prev");
       void notebook.offsetWidth;
       notebook.classList.add(direction === "prev" ? "turn-prev" : "turn-next");
+
+      syncBgm();
     }
 
     function openMember(index) {
@@ -942,6 +1016,25 @@
     });
     document.getElementById("prevMember").addEventListener("click", () => renderMember(currentMember - 1, "prev"));
     document.getElementById("nextMember").addEventListener("click", () => renderMember(currentMember + 1, "next"));
+
+    musicToggle.addEventListener("click", () => {
+      if (bgmAudio.paused) {
+        userPausedMusic = false;
+        const attempt = bgmAudio.play();
+        if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
+      } else {
+        userPausedMusic = true;
+        bgmAudio.pause();
+      }
+    });
+    bgmAudio.addEventListener("play", () => {
+      musicToggle.classList.add("is-playing");
+      musicToggle.setAttribute("aria-pressed", "true");
+    });
+    bgmAudio.addEventListener("pause", () => {
+      musicToggle.classList.remove("is-playing");
+      musicToggle.setAttribute("aria-pressed", "false");
+    });
 
     document.addEventListener("keydown", (event) => {
       if (currentView !== "reader") return;
