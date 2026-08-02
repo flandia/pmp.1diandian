@@ -1006,10 +1006,11 @@
         placeholder.textContent = member.name.slice(0, 1);
         placeholder.style.backgroundColor = member.color;
       };
-      image.src = member.image;
+      image.removeAttribute('src');
       image.alt = `${member.title}的照片`;
       image.hidden = false;
       placeholder.hidden = true;
+      image.src = member.image;
 
       notebook.classList.remove("turn-next", "turn-prev");
       void notebook.offsetWidth;
